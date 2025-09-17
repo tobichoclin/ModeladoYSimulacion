@@ -1005,6 +1005,346 @@ class AitkenWindow(tk.Toplevel):
         self.ax.plot(seq_plain_n, seq_plain, alpha=0.5, label="Secuencia g(x) (referencia)")
         self.ax.legend(); self.canvas.draw()
 
+# ===== Diferencias finitas =====
+class FiniteDifferencesWindow(tk.Toplevel):
+    def __init__(self, master=None):
+        super().__init__(master)
+        self.title("📉 Diferencias Finitas")
+        self.geometry("1120x760")
+
+        container = ttk.Frame(self, padding=10)
+        container.pack(fill="both", expand=True)
+
+        # --- Derivadas 1D ---
+        frm_1d = ttk.LabelFrame(container, text="Derivadas numéricas (datos discretos)")
+        frm_1d.pack(fill="x", pady=6)
+
+        ttk.Label(frm_1d, text="f(x):").grid(row=0, column=0, sticky="e", padx=6, pady=6)
+        self.e_fx = ttk.Entry(frm_1d)
+        self.e_fx.grid(row=0, column=1, sticky="we", padx=6, pady=6)
+        self.e_fx.insert(0, "sin(x)")
+
+        ttk.Label(frm_1d, text="x_i:").grid(row=0, column=2, sticky="e", padx=6, pady=6)
+        self.e_xi = ttk.Entry(frm_1d, width=12)
+        self.e_xi.grid(row=0, column=3, sticky="we", padx=6, pady=6)
+        self.e_xi.insert(0, "0.8")
+
+        ttk.Label(frm_1d, text="h:").grid(row=0, column=4, sticky="e", padx=6, pady=6)
+        self.e_h = ttk.Entry(frm_1d, width=12)
+        self.e_h.grid(row=0, column=5, sticky="we", padx=6, pady=6)
+        self.e_h.insert(0, "0.1")
+
+        frm_1d.columnconfigure(1, weight=1)
+        frm_1d.columnconfigure(3, weight=1)
+        frm_1d.columnconfigure(5, weight=1)
+
+        ttk.Button(frm_1d, text="Calcular diferencias", style="Big.TButton", command=self.run_1d)\
+            .grid(row=0, column=6, padx=8, pady=6)
+
+        cols = ("Esquema", "f'(x_i)", "f''(x_i)")
+        self.tree_1d = ttk.Treeview(frm_1d, columns=cols, show="headings", height=4)
+        for c in cols:
+            self.tree_1d.heading(c, text=c)
+            self.tree_1d.column(c, anchor="center", width=160 if c != "Esquema" else 180)
+        self.tree_1d.grid(row=1, column=0, columnspan=7, sticky="nsew", padx=6, pady=6)
+        frm_1d.rowconfigure(1, weight=1)
+
+        self.lbl_samples = ttk.Label(frm_1d, text="Puntos evaluados: -")
+        self.lbl_samples.grid(row=2, column=0, columnspan=7, sticky="w", padx=6, pady=(0,6))
+
+        # --- Derivadas parciales ---
+        frm_partial = ttk.LabelFrame(container, text="Derivadas parciales numéricas (mallado rectangular)")
+        frm_partial.pack(fill="x", pady=6)
+
+        ttk.Label(frm_partial, text="f(x,y):").grid(row=0, column=0, sticky="e", padx=6, pady=6)
+        self.e_fxy = ttk.Entry(frm_partial)
+        self.e_fxy.grid(row=0, column=1, sticky="we", padx=6, pady=6)
+        self.e_fxy.insert(0, "x**2 + y**2")
+
+        ttk.Label(frm_partial, text="x_i:").grid(row=0, column=2, sticky="e", padx=6, pady=6)
+        self.e_xp = ttk.Entry(frm_partial, width=12)
+        self.e_xp.grid(row=0, column=3, sticky="we", padx=6, pady=6)
+        self.e_xp.insert(0, "1.0")
+
+        ttk.Label(frm_partial, text="y_j:").grid(row=0, column=4, sticky="e", padx=6, pady=6)
+        self.e_yp = ttk.Entry(frm_partial, width=12)
+        self.e_yp.grid(row=0, column=5, sticky="we", padx=6, pady=6)
+        self.e_yp.insert(0, "-0.5")
+
+        ttk.Label(frm_partial, text="h_x:").grid(row=1, column=0, sticky="e", padx=6, pady=6)
+        self.e_hx = ttk.Entry(frm_partial, width=12)
+        self.e_hx.grid(row=1, column=1, sticky="we", padx=6, pady=6)
+        self.e_hx.insert(0, "0.1")
+
+        ttk.Label(frm_partial, text="h_y:").grid(row=1, column=2, sticky="e", padx=6, pady=6)
+        self.e_hy = ttk.Entry(frm_partial, width=12)
+        self.e_hy.grid(row=1, column=3, sticky="we", padx=6, pady=6)
+        self.e_hy.insert(0, "0.1")
+
+        frm_partial.columnconfigure(1, weight=1)
+        frm_partial.columnconfigure(3, weight=1)
+        frm_partial.columnconfigure(5, weight=1)
+
+        ttk.Button(frm_partial, text="Calcular parciales", style="Big.TButton", command=self.run_partial)\
+            .grid(row=1, column=4, columnspan=2, padx=8, pady=6, sticky="we")
+
+        self.lbl_partial = ttk.Label(frm_partial, text="∂f/∂x ≈ -,   ∂f/∂y ≈ -")
+        self.lbl_partial.grid(row=2, column=0, columnspan=6, sticky="w", padx=6, pady=(0,6))
+
+        info = (
+            "Las fórmulas empleadas siguen las diferencias finitas progresivas, regresivas y centrales "
+            "para f'(x_i) y f''(x_i); las derivadas parciales usan un esquema central sobre una malla."
+        )
+        ttk.Label(container, text=info, wraplength=980, justify="left").pack(fill="x", pady=(8,0))
+
+    def clear_tree(self):
+        for item in self.tree_1d.get_children():
+            self.tree_1d.delete(item)
+
+    def run_1d(self):
+        try:
+            f_str = self.e_fx.get().strip()
+            fx = safe_eval_function_1d(f_str)
+            xi = float(self.e_xi.get().replace(",", "."))
+            h = float(self.e_h.get().replace(",", "."))
+            if h == 0:
+                raise ValueError
+        except Exception:
+            messagebox.showerror("Error", "Verifique f(x), x_i y h.")
+            return
+
+        def f_eval(x):
+            val = fx(np.array([x]))
+            val = np.asarray(val, dtype=float)
+            if val.size == 0 or not np.isfinite(val[0]):
+                raise ValueError("Evaluación de f(x) no finita.")
+            return float(val[0])
+
+        try:
+            f_x = f_eval(xi)
+            f_xph = f_eval(xi + h)
+            f_xmh = f_eval(xi - h)
+            f_xp2h = f_eval(xi + 2*h)
+            f_xm2h = f_eval(xi - 2*h)
+        except Exception as e:
+            messagebox.showerror("Evaluación", str(e))
+            return
+
+        self.clear_tree()
+
+        rows = [
+            ("Progresiva",
+             (f_xph - f_x) / h,
+             (f_xp2h - 2*f_xph + f_x) / (h**2)),
+            ("Regresiva",
+             (f_x - f_xmh) / h,
+             (f_x - 2*f_xmh + f_xm2h) / (h**2)),
+            ("Central",
+             (f_xph - f_xmh) / (2*h),
+             (f_xph - 2*f_x + f_xmh) / (h**2)),
+        ]
+
+        for esquema, d1, d2 in rows:
+            self.tree_1d.insert("", "end", values=(esquema, f"{d1:.10g}", f"{d2:.10g}"))
+
+        puntos = (
+            f"f(x_i) = {f_x:.10g}, f(x_i±h) = [{f_xmh:.10g}, {f_xph:.10g}], "
+            f"f(x_i±2h) = [{f_xm2h:.10g}, {f_xp2h:.10g}]"
+        )
+        self.lbl_samples.config(text="Puntos evaluados: " + "  ".join(puntos))
+
+    def run_partial(self):
+        try:
+            f_str = self.e_fxy.get().strip()
+            fxy = safe_eval_function_2d(f_str)
+            xi = float(self.e_xp.get().replace(",", "."))
+            yj = float(self.e_yp.get().replace(",", "."))
+            hx = float(self.e_hx.get().replace(",", "."))
+            hy = float(self.e_hy.get().replace(",", "."))
+            if hx == 0 or hy == 0:
+                raise ValueError
+        except Exception:
+            messagebox.showerror("Error", "Verifique f(x,y), (x_i,y_j) y los pasos h_x, h_y.")
+            return
+
+        def f_eval(x, y):
+            val = fxy(np.array([x]), np.array([y]))
+            val = np.asarray(val, dtype=float)
+            if val.size == 0 or not np.isfinite(val[0]):
+                raise ValueError("Evaluación de f(x,y) no finita.")
+            return float(val[0])
+
+        try:
+            df_dx = (f_eval(xi + hx, yj) - f_eval(xi - hx, yj)) / (2 * hx)
+            df_dy = (f_eval(xi, yj + hy) - f_eval(xi, yj - hy)) / (2 * hy)
+        except Exception as e:
+            messagebox.showerror("Evaluación", str(e))
+            return
+
+        self.lbl_partial.config(text=f"∂f/∂x ≈ {df_dx:.10g},   ∂f/∂y ≈ {df_dy:.10g}")
+
+
+# ===== Runge-Kutta =====
+class RungeKuttaWindow(tk.Toplevel):
+    def __init__(self, master=None):
+        super().__init__(master)
+        self.title("🧮 Métodos de Runge–Kutta")
+        self.geometry("1150x760")
+
+        frm = ttk.LabelFrame(self, text="Problema de valor inicial: y' = f(x,y)")
+        frm.pack(fill="x", padx=10, pady=8)
+
+        ttk.Label(frm, text="f(x,y):").grid(row=0, column=0, sticky="e", padx=6, pady=6)
+        self.e_f = ttk.Entry(frm)
+        self.e_f.grid(row=0, column=1, sticky="we", padx=6, pady=6)
+        self.e_f.insert(0, "x + y")
+
+        ttk.Label(frm, text="x₀:").grid(row=0, column=2, sticky="e", padx=6, pady=6)
+        self.e_x0 = ttk.Entry(frm, width=12)
+        self.e_x0.grid(row=0, column=3, sticky="we", padx=6, pady=6)
+        self.e_x0.insert(0, "0.0")
+
+        ttk.Label(frm, text="y₀:").grid(row=0, column=4, sticky="e", padx=6, pady=6)
+        self.e_y0 = ttk.Entry(frm, width=12)
+        self.e_y0.grid(row=0, column=5, sticky="we", padx=6, pady=6)
+        self.e_y0.insert(0, "1.0")
+
+        ttk.Label(frm, text="h:").grid(row=1, column=0, sticky="e", padx=6, pady=6)
+        self.e_h = ttk.Entry(frm, width=12)
+        self.e_h.grid(row=1, column=1, sticky="we", padx=6, pady=6)
+        self.e_h.insert(0, "0.2")
+
+        ttk.Label(frm, text="Pasos N:").grid(row=1, column=2, sticky="e", padx=6, pady=6)
+        self.e_n = ttk.Entry(frm, width=12)
+        self.e_n.grid(row=1, column=3, sticky="we", padx=6, pady=6)
+        self.e_n.insert(0, "10")
+
+        ttk.Label(frm, text="Método:").grid(row=1, column=4, sticky="e", padx=6, pady=6)
+        self.cmb_method = ttk.Combobox(frm, state="readonly", values=[
+            "Euler (RK1)",
+            "Heun (RK2)",
+            "Kutta clásico (RK3)",
+            "Clásico (RK4)",
+        ])
+        self.cmb_method.grid(row=1, column=5, sticky="we", padx=6, pady=6)
+        self.cmb_method.current(3)
+
+        frm.columnconfigure(1, weight=1)
+        frm.columnconfigure(3, weight=1)
+        frm.columnconfigure(5, weight=1)
+
+        btns = ttk.Frame(self)
+        btns.pack(fill="x", padx=10, pady=(0,6))
+        ttk.Button(btns, text="Integrar", style="Big.TButton", command=self.run).pack(side="left", padx=5)
+        ttk.Button(btns, text="Limpiar", command=self.clear).pack(side="left", padx=5)
+
+        self.lbl_res = ttk.Label(self, text="Resultado: -")
+        self.lbl_res.pack(fill="x", padx=12, pady=6)
+
+        cols = ("n", "x_n", "y_n", "k1", "k2", "k3", "k4")
+        self.tree = ttk.Treeview(self, columns=cols, show="headings", height=10)
+        for idx, c in enumerate(cols):
+            self.tree.heading(c, text=c)
+            width = 90 if c == "n" else 150
+            self.tree.column(c, width=width, anchor="center")
+        self.tree.pack(fill="both", expand=False, padx=10, pady=8)
+
+        self.fig, self.ax = plt.subplots(figsize=(8.6, 4.0), dpi=100)
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self)
+        self.canvas.get_tk_widget().pack(fill="both", expand=True, padx=10, pady=(0,10))
+        self._style_axes()
+
+    def _style_axes(self):
+        self.ax.clear()
+        self.ax.set_xlabel("x")
+        self.ax.set_ylabel("y(x)")
+        self.ax.grid(True, linestyle="--", linewidth=0.6)
+        self.canvas.draw()
+
+    def clear(self):
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        self.lbl_res.config(text="Resultado: -")
+        self._style_axes()
+
+    def run(self):
+        try:
+            f_str = self.e_f.get().strip()
+            f = safe_eval_function_2d(f_str)
+            x0 = float(self.e_x0.get().replace(",", "."))
+            y0 = float(self.e_y0.get().replace(",", "."))
+            h = float(self.e_h.get().replace(",", "."))
+            if h == 0:
+                raise ValueError
+            N = int(self.e_n.get())
+            if N <= 0:
+                raise ValueError
+            method = self.cmb_method.get()
+        except Exception:
+            messagebox.showerror("Error", "Revise la función, condiciones iniciales, h y N.")
+            return
+
+        def f_eval(x, y):
+            val = f(np.array([x]), np.array([y]))
+            val = np.asarray(val, dtype=float)
+            if val.size == 0 or not np.isfinite(val[0]):
+                raise ValueError("Evaluación de f(x,y) no finita.")
+            return float(val[0])
+
+        self.clear()
+
+        def step(xn, yn):
+            if method == "Euler (RK1)":
+                k1 = f_eval(xn, yn)
+                yn1 = yn + h * k1
+                return yn1, {"k1": k1, "k2": None, "k3": None, "k4": None}
+            if method == "Heun (RK2)":
+                k1 = f_eval(xn, yn)
+                k2 = f_eval(xn + h, yn + h * k1)
+                yn1 = yn + h * 0.5 * (k1 + k2)
+                return yn1, {"k1": k1, "k2": k2, "k3": None, "k4": None}
+            if method == "Kutta clásico (RK3)":
+                k1 = f_eval(xn, yn)
+                k2 = f_eval(xn + 0.5 * h, yn + 0.5 * h * k1)
+                k3 = f_eval(xn + h, yn - h * k1 + 2 * h * k2)
+                yn1 = yn + (h / 6.0) * (k1 + 4 * k2 + k3)
+                return yn1, {"k1": k1, "k2": k2, "k3": k3, "k4": None}
+            if method == "Clásico (RK4)":
+                k1 = f_eval(xn, yn)
+                k2 = f_eval(xn + 0.5 * h, yn + 0.5 * h * k1)
+                k3 = f_eval(xn + 0.5 * h, yn + 0.5 * h * k2)
+                k4 = f_eval(xn + h, yn + h * k3)
+                yn1 = yn + (h / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
+                return yn1, {"k1": k1, "k2": k2, "k3": k3, "k4": k4}
+            raise ValueError("Método desconocido")
+
+        xs = [x0]
+        ys = [y0]
+
+        try:
+            for n in range(N):
+                xn, yn = xs[-1], ys[-1]
+                y_next, ks = step(xn, yn)
+                ks_row = []
+                for key in ("k1", "k2", "k3", "k4"):
+                    val = ks.get(key)
+                    ks_row.append("-" if val is None else f"{val:.8g}")
+                self.tree.insert("", "end", values=(n, f"{xn:.8g}", f"{yn:.8g}", *ks_row))
+                xs.append(xn + h)
+                ys.append(y_next)
+            # último punto sin ks
+            self.tree.insert("", "end", values=(N, f"{xs[-1]:.8g}", f"{ys[-1]:.8g}", "-", "-", "-", "-"))
+        except Exception as e:
+            messagebox.showerror("Evaluación", str(e))
+            return
+
+        self.lbl_res.config(text=f"Resultado: y(x_N) ≈ {ys[-1]:.10g} (x_N = {xs[-1]:.10g})")
+
+        self._style_axes()
+        self.ax.plot(xs, ys, marker="o", label=method)
+        self.ax.legend()
+        self.canvas.draw()
+
 # ===== Lagrange =====
 def lagrange_interpolacion(puntos):
     x = sp.Symbol('x')
@@ -1155,8 +1495,11 @@ class SuiteNumericaApp(tk.Tk):
         header = ttk.Frame(self, style="App.TFrame")
         header.pack(fill="x")
         ttk.Label(header, text="Suite Numérica", style="Title.TLabel").pack(anchor="w", padx=16, pady=(16,2))
-        ttk.Label(header, text="Monte Carlo · Newton–Cotes · Newton–Raphson · Lagrange · Punto Fijo · Bisección · Aitken Δ²",
-                  style="Sub.TLabel").pack(anchor="w", padx=16, pady=(0,16))
+        subtitle = (
+            "Monte Carlo · Newton–Cotes · Newton–Raphson · Lagrange · Punto Fijo · "
+            "Bisección · Aitken Δ² · Diferencias Finitas · Runge-Kutta"
+        )
+        ttk.Label(header, text=subtitle, style="Sub.TLabel").pack(anchor="w", padx=16, pady=(0,16))
 
         grid = ttk.Frame(self, padding=16)
         grid.pack(fill="both", expand=True)
@@ -1193,6 +1536,12 @@ class SuiteNumericaApp(tk.Tk):
             ("⚡", "Aitken Δ²",
              "Acelera una secuencia tipo punto fijo: compara g(x) vs acelerada.",
              lambda: AitkenWindow(self)),
+            ("📉", "Diferencias Finitas",
+             "Aproxima derivadas primera/segunda y parciales con fórmulas progresivas, regresivas y centrales.",
+             lambda: FiniteDifferencesWindow(self)),
+            ("🧮", "Runge–Kutta",
+             "Resuelve y' = f(x,y) con Euler, Heun, RK-3 y RK-4; tabla de pendientes k_i y gráfica.",
+             lambda: RungeKuttaWindow(self)),
         ]
 
         # Layout 3x3 (ajustable)
